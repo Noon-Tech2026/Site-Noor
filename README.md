@@ -1,78 +1,113 @@
-# NOOR — Site web (React + Vite)
+# NOOR-SARL — Site & Panneau Client
 
-Site vitrine de **NOOR-SARL**, société de services numériques basée à
-Nouakchott (Mauritanie), conforme à la charte graphique de la marque
-(violet `#993EAF`, gris `#BABABA`, police Readex Pro, slogan *"illuminate
-your digital transformation"*).
+Plateforme web de **NOOR-SARL** (Nouakchott, Mauritanie) :
+- **Site vitrine** public présentant les services de l'entreprise.
+- **Panneau client** (dashboard) permettant aux clients de suivre leurs
+  sites, factures et documents ; et aux administrateurs de tout gérer.
 
-## Démarrer le projet
+Conforme à la charte graphique NOOR (violet `#983EAF`, gris `#BABABA`,
+police Readex Pro).
 
-Prérequis : [Node.js](https://nodejs.org) 18 ou plus récent.
+---
+
+## Architecture
+
+```
+Navigateur (React)
+      |  HTTPS
+      v
+  panel.noor.lu  (Nginx + SSL Cloudflare)
+      |
+      +--  /        -> fichiers statiques React (site + dashboard)
+      +--  /api/... -> backend Node.js (port interne 8082)
+                            |
+                            v
+                     MariaDB (base noor_panel)
+```
+
+- **Frontend** : React + Vite (dossier `frontend/`)
+- **Backend** : Node.js + Express (dossier `backend/`)
+- **Base de données** : MariaDB / MySQL (scripts dans `database/`)
+
+L'authentification est **réelle et sécurisée** : mots de passe hachés
+avec bcrypt, sessions par jetons aléatoires, séparation stricte des
+rôles (un client ne voit que ses propres données).
+
+---
+
+## Structure du dépôt
+
+```
+Site-Noor/
+├── frontend/           Application React (site + dashboard)
+│   ├── src/
+│   │   ├── api/client.js       Client API (fetch vers le backend)
+│   │   ├── auth/AuthContext.jsx Authentification réelle
+│   │   ├── components/
+│   │   ├── pages/
+│   │   └── ...
+│   ├── .env.example
+│   └── package.json
+│
+├── backend/            API Node.js + Express
+│   ├── server.js               Serveur & routes sécurisées
+│   ├── docker-compose.yml
+│   ├── .env.example
+│   └── package.json
+│
+├── database/           Scripts SQL
+│   ├── 01_schema.sql           Tables (users, sites, invoices...)
+│   └── 02_db_user.sql          Utilisateur MariaDB dédié
+│
+├── docs/
+│   ├── DEPLOYMENT.md           Comment déployer sur le serveur
+│   └── ARCHITECTURE.md         Comment tout fonctionne
+│
+└── .gitignore          Bloque .env et secrets
+```
+
+---
+
+## Démarrage rapide (développement local)
+
+Prérequis : Node.js 20+, et une base MariaDB accessible.
 
 ```bash
-# 1. Installer les dépendances
+# 1. Base de données
+#    Exécuter database/01_schema.sql puis database/02_db_user.sql
+#    dans phpMyAdmin ou en ligne de commande.
+
+# 2. Backend
+cd backend
+cp .env.example .env        # puis remplir les vraies valeurs
 npm install
+npm start                    # API sur http://localhost:8082
 
-# 2. Lancer le serveur de développement
-npm run dev
+# 3. Frontend
+cd ../frontend
+cp .env.example .env         # VITE_API_BASE=http://localhost:8082/api
+npm install
+npm run dev                  # site sur http://localhost:5173
 ```
 
-Le site est alors accessible sur `http://localhost:5173`.
+---
 
-## Construire pour la production
+## Sécurité — points importants
 
-```bash
-npm run build
-```
+- **Aucun secret dans le dépôt.** Les mots de passe et clés vivent dans
+  des fichiers `.env` locaux, ignorés par Git (voir `.gitignore`).
+  Chaque développeur copie `.env.example` vers `.env` et remplit ses
+  propres valeurs.
+- Les mots de passe utilisateurs sont **hachés (bcrypt)**, jamais stockés
+  en clair.
+- Le backend utilise des **requêtes préparées** (protection contre les
+  injections SQL).
+- Un client ne peut accéder qu'à ses propres données (vérifié côté
+  serveur, pas côté navigateur).
 
-Les fichiers optimisés sont générés dans le dossier `dist/`. Vous pouvez
-héberger ce dossier sur n'importe quel hébergeur statique (Vercel,
-Netlify, GitHub Pages, un serveur classique, etc.).
+---
 
-Pour prévisualiser le build de production en local :
+## Déploiement
 
-```bash
-npm run preview
-```
-
-## Structure du projet
-
-```
-noor-react/
-├── index.html              Page HTML racine (titre, meta description)
-├── public/
-│   └── logo.png             Logo NOOR (favicon + en-tête)
-├── src/
-│   ├── main.jsx              Point d'entrée React
-│   ├── App.jsx                Composant racine
-│   ├── index.css              Styles globaux minimaux
-│   └── components/
-│       └── NoorSite.jsx        Le site complet (hero, services, contact...)
-├── package.json
-└── vite.config.js
-```
-
-## Modifier le contenu
-
-Tout le contenu (textes, services, coordonnées) se trouve dans
-`src/components/NoorSite.jsx` :
-- Le tableau `SERVICES` liste les 6 domaines d'activité (icônes SVG incluses)
-- Le tableau `APPROACH` liste les 4 étapes de la section « Comment nous travaillons »
-- Le téléphone, l'adresse et le slogan sont directement dans le JSX de la section `#contact` et du `<header>`
-
-Le formulaire de contact est actuellement visuel uniquement (il affiche
-une confirmation à l'écran). Pour le rendre fonctionnel, connectez-le à
-un service d'envoi d'e-mails (ex. [Resend](https://resend.com),
-[EmailJS](https://www.emailjs.com)) ou à votre propre API dans la
-fonction `onSubmit` du formulaire.
-
-## Charte graphique appliquée
-
-| Élément     | Valeur                                |
-|-------------|----------------------------------------|
-| Violet primaire | `#993EAF`                          |
-| Gris secondaire | `#BABABA`                          |
-| Anthracite (piliers) | `#232226`                     |
-| Police du nom / titres | Readex Pro (Bold)            |
-| Police du corps | IBM Plex Sans                      |
-| Slogan | « illuminate your digital transformation » |
+Voir [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) pour la procédure complète
+de mise en ligne sur le serveur (`panel.noor.lu`).

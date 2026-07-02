@@ -1,0 +1,25 @@
+services:
+  panel-api:
+    image: node:20-alpine
+    container_name: panel-api
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      DB_HOST: mariadb
+      DB_NAME: noor_panel
+      DB_USER: noor_panel_user
+      DB_PASS: "REMPLACER_PAR_MOT_DE_PASSE_FORT"
+      CORS_ORIGIN: "https://panel.noor.lu"
+      PORT: "8082"
+    volumes:
+      - /srv/noor/panel/node-api:/app
+    ports:
+      - "127.0.0.1:8082:8082"
+    networks:
+      - noor_db
+    command: sh -c "npm install --omit=dev && node server.js"
+
+networks:
+  noor_db:
+    external: true
+    name: database_noor_db

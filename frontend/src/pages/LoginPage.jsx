@@ -10,13 +10,23 @@ export default function LoginPage() {
   const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const session = login({ email, password });
-    const from = location.state?.from;
-    if (session.role === "admin") navigate(from ?? "/admin", { replace: true });
-    else navigate("/", { replace: true });
+    setError("");
+    setBusy(true);
+    try {
+      const user = await login({ email, password });
+      const from = location.state?.from;
+      if (user.role === "admin") navigate(from ?? "/admin", { replace: true });
+      else navigate("/", { replace: true });
+    } catch (err) {
+      setError(err.message || "Échec de la connexion");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -41,7 +51,8 @@ export default function LoginPage() {
             <label htmlFor="password" style={styles.label}>Mot de passe</label>
             <input id="password" type="password" required placeholder="••••••••" style={styles.input} value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
-          <button type="submit" className="btn btn-primary" style={{ justifyContent: "center" }}>Se connecter</button>
+          {error && <div style={{ color: "#B3261E", fontSize: "0.85rem", background: "#FCECEA", padding: "10px 14px", borderRadius: 2 }}>{error}</div>}
+          <button type="submit" disabled={busy} className="btn btn-primary" style={{ justifyContent: "center", opacity: busy ? 0.7 : 1 }}>{busy ? "Connexion…" : "Se connecter"}</button>
         </form>
 
         <Link to="/" style={styles.back}>← Retour au site</Link>
