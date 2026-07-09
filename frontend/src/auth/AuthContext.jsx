@@ -38,6 +38,14 @@ export function AuthProvider({ children }) {
     return user;
   };
 
+  // Inscription (nouveau compte client) : connecte automatiquement l'utilisateur
+  const register = async ({ email, password, fullName }) => {
+    const { token, user } = await api.register(email, password, fullName);
+    setToken(token);
+    setUser(user);
+    return user;
+  };
+
   const logout = async () => {
     try {
       await api.logout();
@@ -49,7 +57,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

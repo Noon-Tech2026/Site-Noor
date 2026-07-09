@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute.jsx'
 import NoorSite from './components/NoorSite.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import AdminDashboard from './pages/AdminDashboard.jsx'
+import ClientSpace from './pages/ClientSpace.jsx'
 
 export default function App() {
   return (
@@ -11,6 +12,14 @@ export default function App() {
       <Routes>
         <Route path="/" element={<NoorSite />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/espace"
+          element={
+            <ProtectedRoute>
+              <ClientSpace />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/admin"
           element={

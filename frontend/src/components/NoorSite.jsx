@@ -1,9 +1,23 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
+import { api, PENDING_SERVICES_KEY } from "../api/client.js";
 
 const LOGO_SRC = "/logo.png";
 const WHATSAPP_URL = "https://wa.me/22227420048";
+
+// Doit rester synchronisé avec SERVICE_KEYS dans backend/server.js — même ordre que t.services.items
+const SERVICE_KEYS = [
+  "sites_apps",
+  "centres_appels",
+  "reseaux_infra",
+  "ia",
+  "admin_serveurs",
+  "cybersecurite",
+  "api_sms",
+  "adressage",
+  "sixrig",
+];
 
 const IconHome = (p) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="15" height="15" {...p}>
@@ -125,6 +139,16 @@ const translations = {
         { title: "Adressage", desc: "Attribution d'adresses géographiques et cartographie précise — plus de 6000 points déjà répertoriés à Nouakchott et dans le reste de la Mauritanie." },
         { title: "6RIG", desc: "Suivi en temps réel du trajet entre un point de départ et une destination — géolocalisation précise pour le transport et la logistique." },
       ],
+      request: {
+        cta: "Demander ce service",
+        selected: "Sélectionné",
+        already: "Déjà demandé",
+        barText: (n) => `${n} service${n > 1 ? "s" : ""} sélectionné${n > 1 ? "s" : ""}`,
+        barCta: "Continuer ma demande",
+        sending: "Envoi…",
+        banner: "Merci — votre demande a bien été transmise. Notre équipe vous contactera très prochainement.",
+        error: "Impossible d'envoyer votre demande pour le moment. Réessayez plus tard.",
+      },
     },
     projects: {
       eyebrow: "Réalisations",
@@ -174,6 +198,7 @@ const translations = {
       copyright: "© 2026 NOOR-SARL — Nouakchott, Mauritanie. Tous droits réservés.",
       login: "Connexion / Espace client",
       dashboard: "Dashboard admin",
+      space: "Mon espace",
       logout: "Déconnexion",
     },
   },
@@ -221,6 +246,16 @@ const translations = {
         { title: "Addressing", desc: "Geographic address assignment and precise mapping — more than 6,000 points already mapped across Nouakchott and the rest of Mauritania." },
         { title: "6RIG", desc: "Real-time tracking of the route between a starting point and a destination — precise geolocation for transport and logistics." },
       ],
+      request: {
+        cta: "Request this service",
+        selected: "Selected",
+        already: "Already requested",
+        barText: (n) => `${n} service${n > 1 ? "s" : ""} selected`,
+        barCta: "Continue my request",
+        sending: "Sending…",
+        banner: "Thank you — your request has been sent. Our team will contact you shortly.",
+        error: "We couldn't send your request right now. Please try again later.",
+      },
     },
     projects: {
       eyebrow: "Our work",
@@ -270,6 +305,7 @@ const translations = {
       copyright: "© 2026 NOOR-SARL — Nouakchott, Mauritania. All rights reserved.",
       login: "Login / Client area",
       dashboard: "Admin dashboard",
+      space: "My space",
       logout: "Logout",
     },
   },
@@ -294,11 +330,18 @@ const palettes = {
 
 export default function NoorSite() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [sent, setSent] = useState(false);
   const [mode, setMode] = useState("light");
   const [lang, setLang] = useState("fr");
   const [active, setActive] = useState("home");
+
+  const [selectedServices, setSelectedServices] = useState([]);
+  const [existingRequests, setExistingRequests] = useState(new Set());
+  const [submittingRequest, setSubmittingRequest] = useState(false);
+  const [requestError, setRequestError] = useState("");
+  const [requestBanner, setRequestBanner] = useState(false);
 
   const c = palettes[mode];
   const t = translations[lang];
@@ -318,6 +361,60 @@ export default function NoorSite() {
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // Arrivée depuis une autre page avec une ancre (ex: "/#services" depuis l'espace client)
+  useEffect(() => {
+    if (window.location.hash) {
+      const el = document.getElementById(window.location.hash.slice(1));
+      if (el) el.scrollIntoView({ behavior: "smooth" });
+    }
+  }, []);
+
+  // Charge les services déjà demandés par le client connecté, pour éviter les doublons
+  useEffect(() => {
+    if (!user) {
+      setExistingRequests(new Set());
+      return;
+    }
+    let active = true;
+    api
+      .myServiceRequests()
+      .then(({ requests }) => {
+        if (active) setExistingRequests(new Set(requests.map((r) => r.service_key)));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [user]);
+
+  const toggleServiceSelection = useCallback((key) => {
+    setRequestError("");
+    setSelectedServices((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  }, []);
+
+  const handleContinueRequest = useCallback(async () => {
+    if (selectedServices.length === 0) return;
+    if (!user) {
+      localStorage.setItem(PENDING_SERVICES_KEY, JSON.stringify(selectedServices));
+      navigate("/login");
+      return;
+    }
+    setSubmittingRequest(true);
+    setRequestError("");
+    try {
+      await api.requestServices(selectedServices);
+      setExistingRequests((prev) => new Set([...prev, ...selectedServices]));
+      setSelectedServices([]);
+      setRequestBanner(true);
+    } catch (err) {
+      setRequestError(err.message || t.services.request.error);
+    } finally {
+      setSubmittingRequest(false);
+    }
+  }, [selectedServices, user, navigate, t]);
 
   const toggleMode = useCallback(() => setMode((m) => (m === "light" ? "dark" : "light")), []);
 
@@ -476,16 +573,51 @@ export default function NoorSite() {
           <p style={styles.sectionDesc}>{t.services.desc}</p>
         </div>
         <div style={styles.servicesGrid} className="services-grid">
-          {t.services.items.map((s, i) => (
-            <div key={s.title} className="service-card" style={styles.serviceCard}>
-              <span style={styles.serviceIdx}>{String(i + 1).padStart(2, "0")}</span>
-              <div style={styles.serviceIcon}>{SERVICE_ICONS[i]}</div>
-              <h3 style={styles.serviceTitle}>{s.title}</h3>
-              <p style={styles.serviceDesc}>{s.desc}</p>
-            </div>
-          ))}
+          {t.services.items.map((s, i) => {
+            const key = SERVICE_KEYS[i];
+            const already = existingRequests.has(key);
+            const isSelected = selectedServices.includes(key);
+            return (
+              <div key={s.title} className="service-card" style={styles.serviceCard}>
+                <span style={styles.serviceIdx}>{String(i + 1).padStart(2, "0")}</span>
+                <div style={styles.serviceIcon}>{SERVICE_ICONS[i]}</div>
+                <h3 style={styles.serviceTitle}>{s.title}</h3>
+                <p style={styles.serviceDesc}>{s.desc}</p>
+                <button
+                  type="button"
+                  className="service-request-btn"
+                  disabled={already}
+                  style={{
+                    ...styles.serviceRequestBtn,
+                    ...(isSelected ? styles.serviceRequestBtnActive : {}),
+                    ...(already ? styles.serviceRequestBtnDone : {}),
+                  }}
+                  onClick={() => toggleServiceSelection(key)}
+                >
+                  {already ? t.services.request.already : isSelected ? `✓ ${t.services.request.selected}` : t.services.request.cta}
+                </button>
+              </div>
+            );
+          })}
         </div>
       </section>
+
+      {requestBanner && (
+        <div style={styles.requestBanner} role="status">
+          <span>{t.services.request.banner}</span>
+          <button type="button" className="request-banner-close" style={styles.requestBannerClose} onClick={() => setRequestBanner(false)} aria-label="Fermer">✕</button>
+        </div>
+      )}
+
+      {selectedServices.length > 0 && (
+        <div style={styles.requestBar}>
+          <span>{t.services.request.barText(selectedServices.length)}</span>
+          {requestError && <span style={styles.requestBarError}>{requestError}</span>}
+          <button type="button" className="btn btn-primary" disabled={submittingRequest} onClick={handleContinueRequest} style={{ opacity: submittingRequest ? 0.7 : 1 }}>
+            {submittingRequest ? t.services.request.sending : t.services.request.barCta}
+          </button>
+        </div>
+      )}
 
       <section id="projets" style={styles.sectionBordered}>
         <div style={styles.sectionHead}>
@@ -679,8 +811,10 @@ export default function NoorSite() {
           <div style={styles.footAuth}>
             {user ? (
               <>
-                {user.role === "admin" && (
+                {user.role === "admin" ? (
                   <Link to="/admin" className="footer-link">{t.footer.dashboard}</Link>
+                ) : (
+                  <Link to="/espace" className="footer-link">{t.footer.space}</Link>
                 )}
                 <button className="footer-link-btn" onClick={logout}>{t.footer.logout} ({user.email})</button>
               </>
@@ -773,6 +907,14 @@ function getStyles(c) {
     serviceIcon: { width: 42, height: 42, marginBottom: 24, color: c.accent },
     serviceTitle: { fontFamily: "'Readex Pro', sans-serif", fontSize: "1.06rem", fontWeight: 600, marginBottom: 12 },
     serviceDesc: { color: c.muted, fontSize: "0.92rem" },
+    serviceRequestBtn: { marginTop: 22, alignSelf: "flex-start", fontFamily: "'Readex Pro', sans-serif", fontSize: "0.82rem", fontWeight: 500, padding: "10px 18px", borderRadius: 999, border: `1px solid ${c.accent}`, background: "transparent", color: c.accent, cursor: "pointer", transition: "background .2s, color .2s" },
+    serviceRequestBtnActive: { background: c.accent, color: "#fff" },
+    serviceRequestBtnDone: { border: `1px solid ${c.border}`, color: c.muted, cursor: "default" },
+
+    requestBanner: { position: "fixed", top: 84, left: "50%", transform: "translateX(-50%)", zIndex: 60, display: "flex", alignItems: "center", gap: 16, background: c.statusOkBg, color: c.statusOkFg, padding: "14px 20px", borderRadius: 12, fontSize: "0.9rem", maxWidth: "min(560px, 86vw)", boxShadow: c.shadow },
+    requestBannerClose: { background: "none", border: "none", color: "inherit", cursor: "pointer", fontSize: "0.9rem", flexShrink: 0 },
+    requestBar: { position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 60, display: "flex", alignItems: "center", flexWrap: "wrap", justifyContent: "center", gap: 18, background: c.bg, border: `1px solid ${c.border}`, padding: "14px 22px", borderRadius: 999, fontSize: "0.9rem", boxShadow: c.shadow, maxWidth: "min(560px, 92vw)" },
+    requestBarError: { color: "#B3261E", fontSize: "0.82rem" },
 
     projectsGrid: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 24 },
     projectCard: { display: "flex", flexDirection: "column" },
@@ -857,6 +999,8 @@ const css = (c) => `
 
   .service-card { transition: transform .3s, border-color .3s; }
   .service-card:hover { transform: translateY(-4px); border-color: ${c.accent} !important; }
+  .service-request-btn:not(:disabled):hover { background: ${c.accent} !important; color: #fff !important; }
+  .service-request-btn:disabled { cursor: default; opacity: 0.75; }
 
   .project-card { transition: transform .3s; }
   .project-card:hover { transform: translateY(-4px); }
